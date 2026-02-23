@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}Finance App{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}" />
+  </head>
+  <body>
+    <header class="topbar">
+      <nav class="tabs">
+        <a class="tab {% if request.url.path == '/contracts' %}active{% endif %}" href="/contracts">Contract Form</a>
+        <a class="tab {% if request.url.path == '/assistant' %}active{% endif %}" href="/assistant">Financial Assistant</a>
+      </nav>
+      <div class="session-actions">
+        {% if user %}
+        <span class="user-pill">{{ user.username }} ({{ user.role }})</span>
+        <form method="post" action="/logout">
+          <button type="submit">Logout</button>
+        </form>
+        {% else %}
+        <a href="/login">Login</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <main class="container">{% block content %}{% endblock %}</main>
+
+    <script src="{{ url_for('static', path='app.js') }}"></script>
+  </body>
+</html>
