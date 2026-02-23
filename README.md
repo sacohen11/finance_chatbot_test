@@ -1,5 +1,6 @@
 # finance_chatbot_test
 
+Flask app providing a contract monthly report page with historical lookup and upsert save.
 PostgreSQL schema, SQLAlchemy ORM models, and Alembic migration setup for contract form data and chatbot memory.
 
 ## Structure
@@ -30,6 +31,17 @@ Minimal FastAPI app with server-rendered templates for contract entry and a fina
 ## Run
 
 ```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Visit `http://localhost:5000/contracts`.
+
+## Test
+
+```bash
+pytest
+```
 pip install fastapi uvicorn jinja2 python-multipart
 uvicorn app.main:app --reload
 ```
