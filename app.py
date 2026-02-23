@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import html
+import os
 import secrets
-import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from urllib.parse import parse_qs
 from wsgiref.simple_server import make_server
 
-BASE_DIR = Path(__file__).parent
-DB_PATH = BASE_DIR / "app.db"
+import psycopg
+from psycopg.rows import dict_row
+
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/finance")
 SESSION_COOKIE = "finance_sid"
 sessions: dict[str, int] = {}
 
@@ -34,45 +35,56 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def db_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def db_conn() -> psycopg.Connection:
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
 def init_db() -> None:
-    with db_conn() as db:
-        db.executescript(
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
             """
             CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id BIGSERIAL PRIMARY KEY,
                 username TEXT NOT NULL UNIQUE,
-                created_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS chat_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                title TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS chat_messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_session_id INTEGER NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('user','assistant')),
-                message TEXT NOT NULL,
-                created_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS recommended_prompts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                prompt TEXT NOT NULL,
-                topic TEXT NOT NULL,
-                score INTEGER NOT NULL,
-                created_at TEXT NOT NULL
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_sessions (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id),
+                title TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id BIGSERIAL PRIMARY KEY,
+                chat_session_id BIGINT NOT NULL REFERENCES chat_sessions(id),
+                role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                message TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS recommended_prompts (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL REFERENCES users(id),
+                prompt TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                score INTEGER NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL
+            );
+            """
+        )
+        conn.commit()
 
 
 def parse_cookies(environ: dict) -> dict[str, str]:
@@ -92,38 +104,44 @@ def get_form_data(environ: dict) -> dict[str, str]:
     return {k: (v[0] if v else "") for k, v in parsed.items()}
 
 
-def get_or_create_user(username: str) -> sqlite3.Row:
-    with db_conn() as db:
-        row = db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+def get_or_create_user(username: str) -> dict:
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT * FROM users WHERE username=%s", (username,))
+        row = cur.fetchone()
         if row:
             return row
-        db.execute("INSERT INTO users (username, created_at) VALUES (?,?)", (username, utc_now()))
-        return db.execute("SELECT * FROM users WHERE username=?", (username,)).fetchone()
+        cur.execute("INSERT INTO users (username, created_at) VALUES (%s, %s) RETURNING *", (username, utc_now()))
+        conn.commit()
+        return cur.fetchone()
 
 
-def ensure_chat_session(user_id: int, wanted_id: int | None = None) -> sqlite3.Row:
-    with db_conn() as db:
+def ensure_chat_session(user_id: int, wanted_id: int | None = None) -> dict:
+    with db_conn() as conn, conn.cursor() as cur:
         if wanted_id:
-            row = db.execute("SELECT * FROM chat_sessions WHERE id=? AND user_id=?", (wanted_id, user_id)).fetchone()
+            cur.execute("SELECT * FROM chat_sessions WHERE id=%s AND user_id=%s", (wanted_id, user_id))
+            row = cur.fetchone()
             if row:
                 return row
+
         now = utc_now()
         title = f"Session {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        cur = db.execute(
-            "INSERT INTO chat_sessions (user_id,title,created_at,updated_at) VALUES (?,?,?,?)",
+        cur.execute(
+            "INSERT INTO chat_sessions (user_id, title, created_at, updated_at) VALUES (%s, %s, %s, %s) RETURNING *",
             (user_id, title, now, now),
         )
-        return db.execute("SELECT * FROM chat_sessions WHERE id=?", (cur.lastrowid,)).fetchone()
+        conn.commit()
+        return cur.fetchone()
 
 
 def append_message(chat_session_id: int, role: str, message: str) -> None:
     now = utc_now()
-    with db_conn() as db:
-        db.execute(
-            "INSERT INTO chat_messages (chat_session_id,role,message,created_at) VALUES (?,?,?,?)",
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO chat_messages (chat_session_id, role, message, created_at) VALUES (%s, %s, %s, %s)",
             (chat_session_id, role, message, now),
         )
-        db.execute("UPDATE chat_sessions SET updated_at=? WHERE id=?", (now, chat_session_id))
+        cur.execute("UPDATE chat_sessions SET updated_at=%s WHERE id=%s", (now, chat_session_id))
+        conn.commit()
 
 
 def assistant_reply(text: str) -> str:
@@ -131,19 +149,19 @@ def assistant_reply(text: str) -> str:
 
 
 def regenerate_recommendations(user_id: int, last_n: int = 30) -> None:
-    with db_conn() as db:
-        queries = [
-            r["message"].lower()
-            for r in db.execute(
-                """
-                SELECT cm.message FROM chat_messages cm
-                JOIN chat_sessions cs ON cs.id=cm.chat_session_id
-                WHERE cs.user_id=? AND cm.role='user'
-                ORDER BY cm.created_at DESC LIMIT ?
-                """,
-                (user_id, last_n),
-            ).fetchall()
-        ]
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT cm.message
+            FROM chat_messages cm
+            JOIN chat_sessions cs ON cs.id = cm.chat_session_id
+            WHERE cs.user_id=%s AND cm.role='user'
+            ORDER BY cm.created_at DESC
+            LIMIT %s
+            """,
+            (user_id, last_n),
+        )
+        queries = [r["message"].lower() for r in cur.fetchall()]
 
         scores: list[tuple[TopicRule, int]] = []
         for rule in TOPIC_RULES:
@@ -152,21 +170,22 @@ def regenerate_recommendations(user_id: int, last_n: int = 30) -> None:
                 scores.append((rule, score))
 
         scores.sort(key=lambda x: (-x[1], x[0].name))
-        db.execute("DELETE FROM recommended_prompts WHERE user_id=?", (user_id,))
+        cur.execute("DELETE FROM recommended_prompts WHERE user_id=%s", (user_id,))
         now = utc_now()
 
         if not scores:
             fallback = TOPIC_RULES[0]
-            db.execute(
-                "INSERT INTO recommended_prompts (user_id,prompt,topic,score,created_at) VALUES (?,?,?,?,?)",
+            cur.execute(
+                "INSERT INTO recommended_prompts (user_id, prompt, topic, score, created_at) VALUES (%s, %s, %s, %s, %s)",
                 (user_id, fallback.prompt, fallback.name, 0, now),
             )
         else:
             for rule, score in scores[:4]:
-                db.execute(
-                    "INSERT INTO recommended_prompts (user_id,prompt,topic,score,created_at) VALUES (?,?,?,?,?)",
+                cur.execute(
+                    "INSERT INTO recommended_prompts (user_id, prompt, topic, score, created_at) VALUES (%s, %s, %s, %s, %s)",
                     (user_id, rule.prompt, rule.name, score, now),
                 )
+        conn.commit()
 
 
 def render_login() -> str:
@@ -178,23 +197,29 @@ def render_login() -> str:
     """
 
 
-def render_assistant(user: sqlite3.Row, active_session_id: int | None = None) -> str:
-    with db_conn() as db:
-        active = ensure_chat_session(user["id"], active_session_id)
-        sess = db.execute("SELECT * FROM chat_sessions WHERE user_id=? ORDER BY updated_at DESC LIMIT 10", (user["id"],)).fetchall()
-        msgs = db.execute("SELECT * FROM chat_messages WHERE chat_session_id=? ORDER BY id", (active["id"],)).fetchall()
-        recs = db.execute("SELECT * FROM recommended_prompts WHERE user_id=? ORDER BY score DESC, topic ASC LIMIT 4", (user["id"],)).fetchall()
+def render_assistant(user: dict, active_session_id: int | None = None) -> str:
+    active = ensure_chat_session(user["id"], active_session_id)
+    with db_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT * FROM chat_sessions WHERE user_id=%s ORDER BY updated_at DESC LIMIT 10", (user["id"],))
+        sess = cur.fetchall()
+        cur.execute("SELECT * FROM chat_messages WHERE chat_session_id=%s ORDER BY id", (active["id"],))
+        msgs = cur.fetchall()
+        cur.execute(
+            "SELECT * FROM recommended_prompts WHERE user_id=%s ORDER BY score DESC, topic ASC LIMIT 4",
+            (user["id"],),
+        )
+        recs = cur.fetchall()
 
     session_html = "".join(
-        f"<a class='session-link {'active' if s['id']==active['id'] else ''}' href='/assistant?session_id={s['id']}'><span>{html.escape(s['title'])}</span><small>{s['updated_at'][:16].replace('T',' ')}</small></a>"
+        f"<a class='session-link {'active' if s['id']==active['id'] else ''}' href='/assistant?session_id={s['id']}'><span>{html.escape(s['title'])}</span><small>{str(s['updated_at'])[:16].replace('T',' ')}</small></a>"
         for s in sess
     )
     msg_html = "".join(
-        f"<article class='msg {m['role']}'><strong>{m['role']}</strong><p>{html.escape(m['message'])}</p><small>{m['created_at'][:19].replace('T',' ')}</small></article>"
+        f"<article class='msg {m['role']}'><strong>{m['role']}</strong><p>{html.escape(m['message'])}</p><small>{str(m['created_at'])[:19].replace('T',' ')}</small></article>"
         for m in msgs
     )
     rec_html = "".join(
-        f"<button class='chip' type='submit' name='recommended_prompt' value='{html.escape(r['prompt'])}'>{html.escape(r['topic'].replace('_',' '))}</button>"
+        f"<button class='chip' type='submit' name='recommended_prompt' value='{html.escape(r['prompt'])}'>{html.escape(r['topic'].replace('_', ' '))}</button>"
         for r in recs
     )
 
@@ -218,7 +243,8 @@ def app(environ, start_response):
     method = environ.get("REQUEST_METHOD", "GET")
 
     if path == "/styles.css":
-        css = (BASE_DIR / "static" / "styles.css").read_text()
+        with open("static/styles.css", "r", encoding="utf-8") as f:
+            css = f.read()
         start_response("200 OK", [("Content-Type", "text/css")])
         return [css.encode("utf-8")]
 
@@ -233,6 +259,10 @@ def app(environ, start_response):
     if path == "/" and method == "POST":
         form = get_form_data(environ)
         username = form.get("username", "").strip()
+        if not username:
+            start_response("400 Bad Request", [("Content-Type", "text/plain")])
+            return [b"username is required"]
+
         user = get_or_create_user(username)
         sid = secrets.token_hex(16)
         sessions[sid] = user["id"]
@@ -245,8 +275,9 @@ def app(environ, start_response):
             start_response("302 Found", [("Location", "/")])
             return [b""]
 
-        with db_conn() as db:
-            user = db.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        with db_conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
+            user = cur.fetchone()
 
         if method == "POST":
             form = get_form_data(environ)
