@@ -1,1 +1,1 @@
-"""Application package for finance chatbot persistence."""
+"""Finance chatbot app package."""
