@@ -1,0 +1,121 @@
+:root {
+  font-family: Arial, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #f5f7fb;
+  color: #1b1f2a;
+}
+
+.topbar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2rem;
+  padding: 1rem;
+  background: #ffffff;
+  border-bottom: 1px solid #d8deeb;
+}
+
+.tabs {
+  display: flex;
+  gap: 1rem;
+}
+
+.tab {
+  text-decoration: none;
+  padding: 0.45rem 0.8rem;
+  border-radius: 6px;
+  color: #223;
+}
+
+.tab.active {
+  background: #dce7ff;
+  font-weight: 700;
+}
+
+.session-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.user-pill {
+  background: #eef2fb;
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.85rem;
+}
+
+.container {
+  max-width: 900px;
+  margin: 1.25rem auto;
+  padding: 0 1rem;
+}
+
+.panel {
+  background: #fff;
+  border: 1px solid #dde3f0;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.narrow {
+  max-width: 500px;
+}
+
+.form-grid {
+  display: grid;
+  gap: 0.6rem;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  padding: 0.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  border-bottom: 1px solid #e8ebf4;
+  padding: 0.5rem;
+}
+
+.hint {
+  color: #445;
+  font-size: 0.9rem;
+}
+
+.error {
+  color: #b00020;
+}
+
+.chat-shell {
+  border: 1px solid #e2e7f5;
+  border-radius: 8px;
+  padding: 0.8rem;
+}
+
+.chat-log {
+  min-height: 100px;
+  margin-bottom: 0.75rem;
+}
+
+.chat-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-form input {
+  flex: 1;
+}
