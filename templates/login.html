@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Finance Chat Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body class="login-page">
+    <main class="login-card">
+      <h1>Finance Assistant</h1>
+      <p>Sign in as an analyst to continue.</p>
+      <form method="post">
+        <input name="username" placeholder="Analyst username" required />
+        <button type="submit">Login</button>
+      </form>
+    </main>
+  </body>
+</html>
