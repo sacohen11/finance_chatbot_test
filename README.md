@@ -87,6 +87,14 @@ Exports in UI:
 - Table CSV download
 - Chart PNG export (Plotly)
 
+## Run with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Then open `http://localhost:5000`.
+
 ## Tests
 
 ```bash
