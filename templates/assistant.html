@@ -1,0 +1,52 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Finance Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>{{ username }}'s sessions</h2>
+        {% for item in sessions %}
+          <a class="session-link {% if item['id'] == active_session['id'] %}active{% endif %}"
+             href="{{ url_for('assistant', session_id=item['id']) }}">
+             <span>{{ item['title'] }}</span>
+             <small>{{ item['updated_at'][:16].replace('T', ' ') }}</small>
+          </a>
+        {% endfor %}
+      </aside>
+
+      <section class="chat-panel">
+        <header>
+          <h1>Assistant</h1>
+          <p>Session #{{ active_session['id'] }}</p>
+        </header>
+
+        <div class="messages">
+          {% for msg in messages %}
+            <article class="msg {{ msg['role'] }}">
+              <strong>{{ msg['role'] }}</strong>
+              <p>{{ msg['message'] }}</p>
+              <small>{{ msg['created_at'][:19].replace('T', ' ') }}</small>
+            </article>
+          {% endfor %}
+        </div>
+
+        <form method="post" class="composer">
+          <input type="hidden" name="chat_session_id" value="{{ active_session['id'] }}" />
+          <div class="chips">
+            {% for rec in recommendations %}
+              <button type="submit" name="recommended_prompt" value="{{ rec['prompt'] }}" class="chip">
+                {{ rec['topic'].replace('_', ' ') }}
+              </button>
+            {% endfor %}
+          </div>
+          <textarea name="message" placeholder="Ask a finance question..."></textarea>
+          <button type="submit">Send</button>
+        </form>
+      </section>
+    </div>
+  </body>
+</html>
