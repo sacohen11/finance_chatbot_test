@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Financial Assistant{% endblock %}
+{% block content %}
+<section class="panel">
+  <h1>Financial Assistant</h1>
+  <p>This placeholder chatbot page is available to authenticated analysts.</p>
+
+  <div class="chat-shell">
+    <div class="chat-log" id="chat-log">
+      <p><strong>Assistant:</strong> Hello! Ask about contract summaries or cashflow scenarios.</p>
+    </div>
+    <form id="chat-form" class="chat-form">
+      <input id="chat-input" placeholder="Type a question..." />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

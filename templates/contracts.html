@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Contract Reports</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; background: #fafafa; }
+      .container { max-width: 900px; margin: 0 auto; background: #fff; padding: 1.5rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+      h1 { margin-top: 0; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+      label { font-weight: 600; display: block; margin-bottom: 0.35rem; }
+      input, textarea, button { width: 100%; padding: 0.6rem; box-sizing: border-box; }
+      textarea { min-height: 100px; }
+      .actions { display: flex; gap: 1rem; margin-top: 1rem; }
+      .actions button { width: auto; cursor: pointer; }
+      .feedback { margin-top: 1rem; padding: 0.6rem; border-radius: 4px; display: none; }
+      .feedback.info { background: #e8f4ff; color: #084298; }
+      .feedback.success { background: #e8f5e9; color: #1b5e20; }
+      .feedback.error { background: #fbe9e7; color: #b71c1c; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Contract Monthly Report</h1>
+      <div class="grid">
+        <div>
+          <label for="contract_number">Contract Number</label>
+          <input id="contract_number" type="text" placeholder="e.g. CNTR-1001" />
+        </div>
+        <div>
+          <label for="report_month">Month</label>
+          <input id="report_month" type="month" />
+        </div>
+        <div>
+          <label for="planned_spend">Planned Spend</label>
+          <input id="planned_spend" type="number" min="0" step="0.01" />
+        </div>
+        <div>
+          <label for="actual_spend">Actual Spend</label>
+          <input id="actual_spend" type="number" min="0" step="0.01" />
+        </div>
+        <div>
+          <label for="planned_labor_hours">Planned Labor Hours</label>
+          <input id="planned_labor_hours" type="number" min="0" step="0.01" />
+        </div>
+        <div>
+          <label for="actual_labor_hours">Actual Labor Hours</label>
+          <input id="actual_labor_hours" type="number" min="0" step="0.01" />
+        </div>
+      </div>
+      <div style="margin-top: 1rem;">
+        <label for="notes">Notes</label>
+        <textarea id="notes" placeholder="Optional notes"></textarea>
+      </div>
+      <div class="actions">
+        <button id="lookup_btn" type="button">Lookup</button>
+        <button id="save_btn" type="button">Save Report</button>
+      </div>
+      <div id="feedback" class="feedback"></div>
+    </div>
+
+    <script src="/static/contracts.js"></script>
+  </body>
+</html>
